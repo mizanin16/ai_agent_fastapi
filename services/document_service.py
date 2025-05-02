@@ -1,6 +1,4 @@
-import re
-import unicodedata
-
+from typing import List
 from fastapi import HTTPException
 from models.schemas import FileResult
 from clients.qdrant import scroll_qdrant
@@ -13,31 +11,42 @@ class FullDocumentService:
     @staticmethod
     async def load_full_document(collection: str, file_name: str, truncate: bool = True) -> FileResult:
 
-        normalized_file_name = force_working_ij(file_name)
-
-        async def try_load(col: str) -> list[dict]:
-            return await scroll_qdrant(
+        async def try_variants(col: str) -> list[dict]:
+            # Попытка 1: без нормализации
+            points = await scroll_qdrant(
                 collection=col,
                 scroll_filter={
-                    "must": [{
-                        "key": "metadata.file_name",
-                        "match": {
-                            "text": normalized_file_name
-                        }
-                    }]
+                    "must": [{"key": "metadata.file_name", "match": {"text": file_name}}]
                 },
                 limit=100,
                 with_payload=["metadata.file_name", "metadata.record_date", "content"]
             )
+            if points:
+                return points
 
-        # Попытка 1: основной запрос
-        points = await try_load(collection)
+            # Попытка 2: с нормализацией
+            normalized = force_working_ij(file_name)
+            if normalized != file_name:
+                points = await scroll_qdrant(
+                    collection=col,
+                    scroll_filter={
+                        "must": [{"key": "metadata.file_name", "match": {"text": normalized}}]
+                    },
+                    limit=100,
+                    with_payload=["metadata.file_name", "metadata.record_date", "content"]
+                )
+            return points
 
-        # Попытка 2: fallback, если ничего не найдено
-        fallback_collection = next((col for col in COLLECTIONS if col != collection), None)
-        if not points and fallback_collection:
-            points = await try_load(fallback_collection)
-            collection = fallback_collection  # используем новую коллекцию
+        # Попробовать сначала в указанной коллекции
+        points = await try_variants(collection)
+
+        # Если не найдено — попробовать в альтернативной коллекции
+        if not points:
+            alt_collection = next((c for c in COLLECTIONS if c != collection), None)
+            if alt_collection:
+                points = await try_variants(alt_collection)
+                if points:
+                    collection = alt_collection  # запомним, что мы его используем
 
         if not points:
             raise HTTPException(status_code=404, detail=f"No data found for file_name '{file_name}'")
@@ -60,10 +69,8 @@ class FullDocumentService:
             record_date=meta.get("record_date", ""),
             content=content,
             collection_used=collection
-
         )
 
 
 def force_working_ij(text: str) -> str:
-    # Преобразовать все 'й' (U+0439) в 'и' + '̆' (U+0438 + U+0306)
     return text.replace("й", "и\u0306").replace("Й", "И\u0306")
