@@ -23,7 +23,7 @@ async def handle_semantic_search(request: UserQuery) -> Dict[str, list[FileResul
                 score=item["score"],
                 file_name=meta.get("file_name", ""),
                 record_date=meta.get("record_date", ""),
-                content=payload.get("pageContent", "")
+                content=payload.get("content", "")
             ))
         return sorted(output, key=lambda x: x.score, reverse=True)
 
