@@ -14,6 +14,8 @@ class FileResult(BaseModel):
     file_name: str
     record_date: Optional[str]
     content: str
+    collection_used: Optional[str] = None
+
 
 
 class SearchResponse(BaseModel):
