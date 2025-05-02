@@ -29,3 +29,24 @@ class ScrollSummaryService:
             )
             for p in points
         ]
+
+    @staticmethod
+    async def get_latest_n(count: int = 2) -> List[FileResult]:
+        points = await scroll_qdrant(
+            collection="transcriptSummary",
+            scroll_filter={"must": []},
+            limit=count,
+            order_by={"key": "timestamp", "direction": "desc"},
+            with_payload=["metadata.file_name", "metadata.record_date", "content"]
+        )
+
+        return [
+            FileResult(
+                id=p["id"],
+                score=1.0,
+                file_name=p["payload"]["metadata"]["file_name"],
+                record_date=p["payload"]["metadata"]["record_date"],
+                content=p["payload"].get("content", "")
+            )
+            for p in points
+        ]
