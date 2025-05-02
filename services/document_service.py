@@ -1,6 +1,7 @@
 from fastapi import HTTPException
 from models.schemas import FileResult
 from clients.qdrant import scroll_qdrant
+import unicodedata
 
 COLLECTIONS = ["rawTranscript", "transcriptSummary"]
 MAX_CONTENT_LENGTH = 5000
@@ -9,6 +10,8 @@ MAX_CONTENT_LENGTH = 5000
 class FullDocumentService:
     @staticmethod
     async def load_full_document(collection: str, file_name: str, truncate: bool = True) -> FileResult:
+        normalized_file_name = normalize_text(file_name)
+
         async def try_load(col: str) -> list[dict]:
             return await scroll_qdrant(
                 collection=col,
@@ -16,7 +19,7 @@ class FullDocumentService:
                     "must": [{
                         "key": "metadata.file_name",
                         "match": {
-                            "text": file_name  # поддержка частичного поиска
+                            "text": normalized_file_name
                         }
                     }]
                 },
@@ -53,6 +56,10 @@ class FullDocumentService:
             file_name=meta.get("file_name", ""),
             record_date=meta.get("record_date", ""),
             content=content,
-            collection_used = collection
+            collection_used=collection
 
         )
+
+
+def normalize_text(text: str) -> str:
+    return unicodedata.normalize("NFC", text)
