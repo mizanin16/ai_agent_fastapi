@@ -42,19 +42,23 @@ class SemanticSearchService:
         results_raw = await search_qdrant("rawTranscript", embedding, request.limit)
         results_summary = await search_qdrant("transcriptSummary", embedding, request.limit)
 
-        seen = set()
-        response: List[FileMeta] = []
+        all_results = results_raw + results_summary
+        all_results = [r for r in all_results if r["score"] >= request.min_score]
 
-        for item in results_raw + results_summary:
-            payload = item.get("payload", {})
-            meta = payload.get("metadata", {})
+        grouped = {}
+        for item in all_results:
+            meta = item.get("payload", {}).get("metadata", {})
             fname = meta.get("file_name")
-            if not fname or fname in seen:
+            if not fname:
                 continue
-            seen.add(fname)
-            response.append(FileMeta(
-                file_name=fname,
-                record_date=meta.get("record_date")
-            ))
+            if fname not in grouped or item["score"] > grouped[fname]["score"]:
+                grouped[fname] = {
+                    "file_name": fname,
+                    "record_date": meta.get("record_date"),
+                    "score": item["score"]
+                }
 
-        return response
+        # сортируем по score ↓
+        sorted_files = sorted(grouped.values(), key=lambda x: x["score"], reverse=True)
+
+        return [FileMeta(file_name=f["file_name"], record_date=f["record_date"]) for f in sorted_files]
