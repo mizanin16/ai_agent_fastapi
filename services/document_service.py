@@ -1,3 +1,4 @@
+from fastapi import HTTPException
 from models.schemas import FileResult
 from clients.qdrant import scroll_qdrant
 
@@ -10,12 +11,15 @@ class FullDocumentService:
             scroll_filter={
                 "must": [{
                     "key": "metadata.file_name",
-                    "match": {"value": file_name}
+                    "match": {"text": file_name}
                 }]
             },
             limit=100,
             with_payload=["metadata.file_name", "metadata.record_date", "content"]
         )
+
+        if not points:
+            raise HTTPException(status_code=404, detail=f"No data found for file_name '{file_name}'")
 
         sorted_points = sorted(
             points,
