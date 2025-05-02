@@ -32,8 +32,8 @@ class FullDocumentService:
 
         content = "\n".join(p["payload"].get("content", "") for p in sorted_points)
 
-        if truncate and len(content) > MAX_CONTENT_LENGTH:
-            content = content[:MAX_CONTENT_LENGTH] + "\n\n... (текст обрезан)"
+        if truncate and len(content) > 5000:
+            content = content[:5000] + "\n\n... (текст обрезан)"
 
         meta = sorted_points[0]["payload"].get("metadata", {})
 
