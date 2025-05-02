@@ -1,7 +1,9 @@
+import re
+import unicodedata
+
 from fastapi import HTTPException
 from models.schemas import FileResult
 from clients.qdrant import scroll_qdrant
-import unicodedata
 
 COLLECTIONS = ["rawTranscript", "transcriptSummary"]
 MAX_CONTENT_LENGTH = 5000
@@ -10,7 +12,8 @@ MAX_CONTENT_LENGTH = 5000
 class FullDocumentService:
     @staticmethod
     async def load_full_document(collection: str, file_name: str, truncate: bool = True) -> FileResult:
-        normalized_file_name = normalize_text(file_name)
+
+        normalized_file_name = force_working_ij(file_name)
 
         async def try_load(col: str) -> list[dict]:
             return await scroll_qdrant(
@@ -61,5 +64,6 @@ class FullDocumentService:
         )
 
 
-def normalize_text(text: str) -> str:
-    return unicodedata.normalize("NFC", text)
+def force_working_ij(text: str) -> str:
+    # Преобразовать все 'й' (U+0439) в 'и' + '̆' (U+0438 + U+0306)
+    return text.replace("й", "и\u0306").replace("Й", "И\u0306")
