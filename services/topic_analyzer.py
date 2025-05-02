@@ -1,13 +1,14 @@
-from collections import Counter
-import re
+from typing import List
+from models.schemas import FileMeta
 from utils.time import get_year_range
 from clients.qdrant import scroll_qdrant
 
 
 class TopicAnalyzerService:
     @staticmethod
-    async def analyze_year(year: int) -> list[str]:
+    async def analyze_year(year: int) -> List[FileMeta]:
         start_ts, end_ts = get_year_range(year)
+
         points = await scroll_qdrant(
             collection="transcriptSummary",
             scroll_filter={
@@ -16,11 +17,23 @@ class TopicAnalyzerService:
                     "range": {"gte": start_ts, "lte": end_ts}
                 }]
             },
-            limit=100,
-            with_payload=["content"]
+            limit=1000,
+            order_by={"key": "timestamp", "direction": "desc"},
+            with_payload=["metadata.file_name", "metadata.record_date"]
         )
 
-        text = " ".join(p["payload"].get("content", "") for p in points)
-        words = re.findall(r"\b[\wа-яА-Я]{4,}\b", text.lower())
-        counter = Counter(words)
-        return [word for word, _ in counter.most_common(10)]
+        seen = set()
+        result = []
+
+        for point in points:
+            meta = point.get("payload", {}).get("metadata", {})
+            fname = meta.get("file_name")
+            if not fname or fname in seen:
+                continue
+            seen.add(fname)
+            result.append(FileMeta(
+                file_name=fname,
+                record_date=meta.get("record_date")
+            ))
+
+        return result
