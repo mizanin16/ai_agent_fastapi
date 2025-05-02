@@ -1,3 +1,4 @@
+from typing import List
 from fastapi import APIRouter, Query
 from models.schemas import FileResult
 from services.summary_service import ScrollSummaryService
@@ -5,8 +6,10 @@ from utils.time import get_month_range
 
 router = APIRouter()
 
+from models.schemas import FileMeta
 
-@router.get("/summaries-by-month", response_model=list[FileResult])
+
+@router.get("/summaries-by-month", response_model=List[FileMeta])
 async def summaries_by_month(year: int, month: int):
     start_ts, end_ts = get_month_range(year, month)
     return await ScrollSummaryService.get_by_date_range(start_ts, end_ts)
