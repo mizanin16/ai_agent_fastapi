@@ -1,5 +1,5 @@
-from typing import Dict
-from models.schemas import UserQuery, FileResult
+from typing import Dict, List
+from models.schemas import UserQuery, FileResult, FileMeta
 from clients.openai import get_embedding
 from clients.qdrant import search_qdrant
 
@@ -34,3 +34,27 @@ class SemanticSearchService:
             "transcriptSummary": process_results(results_summary),
             "rawTranscript": process_results(results_raw)
         }
+
+    @staticmethod
+    async def search_unique_files_only(request: UserQuery) -> List[FileMeta]:
+        embedding = await get_embedding(request.query)
+
+        results_raw = await search_qdrant("rawTranscript", embedding, request.limit)
+        results_summary = await search_qdrant("transcriptSummary", embedding, request.limit)
+
+        seen = set()
+        response: List[FileMeta] = []
+
+        for item in results_raw + results_summary:
+            payload = item.get("payload", {})
+            meta = payload.get("metadata", {})
+            fname = meta.get("file_name")
+            if not fname or fname in seen:
+                continue
+            seen.add(fname)
+            response.append(FileMeta(
+                file_name=fname,
+                record_date=meta.get("record_date")
+            ))
+
+        return response
