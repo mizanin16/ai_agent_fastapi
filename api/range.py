@@ -6,7 +6,7 @@ router = APIRouter()
 
 @router.get("/summaries-by-range", response_model=list[FileMeta])
 async def summaries_by_range(
-    from_timestamp: int = Query(..., description="Начало периода (Unix timestamp)"),
-    to_timestamp: int = Query(..., description="Конец периода (Unix timestamp)")
+    start_ts: int = Query(..., description="Начало периода (Unix timestamp)"),
+    end_ts: int = Query(..., description="Конец периода (Unix timestamp)")
 ):
-    return await TimeRangeService.get_summaries_by_range(from_timestamp, to_timestamp)
+    return await TimeRangeService.get_summaries_by_range(start_ts, end_ts)
