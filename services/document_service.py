@@ -13,6 +13,7 @@ class FullDocumentService:
 
         async def try_variants(col: str) -> list[dict]:
             # Попытка 1: без нормализации
+            # todo: Проверить запрос в Qdrant на OR text с нормализацией и без
             points = await scroll_qdrant(
                 collection=col,
                 scroll_filter={
