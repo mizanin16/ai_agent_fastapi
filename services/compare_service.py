@@ -45,13 +45,20 @@ class CompareMeetingsService:
         first_files = files_by_date[first_ts]
 
         if len(first_files) >= 2:
-            selected_files = first_files
+            combined_files = first_files
         else:
             if len(sorted_timestamps) < 2:
                 raise HTTPException(status_code=404, detail="Not enough data for comparison")
             second_ts = sorted_timestamps[1]
-            selected_files = first_files + files_by_date[second_ts]
+            combined_files = first_files + files_by_date[second_ts]
 
+        # 🔧 4.1. Удаление дубликатов по file_name
+        seen = set()
+        selected_files = []
+        for f in combined_files:
+            if f["file_name"] not in seen:
+                selected_files.append(f)
+                seen.add(f["file_name"])
         # 5. Получение content из FullDocumentService
         truncate = True if len(selected_files) <= 4 else False
         max_length = MAX_FULL_CHARS if not truncate else None
