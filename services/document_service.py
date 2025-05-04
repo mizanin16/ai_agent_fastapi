@@ -13,14 +13,18 @@ class FullDocumentService:
 
         async def try_variants(col: str) -> list[dict]:
             # Попытка 1: без нормализации
-            # todo: Проверить запрос в Qdrant на OR text с нормализацией и без
             points = await scroll_qdrant(
                 collection=col,
                 scroll_filter={
                     "must": [{"key": "metadata.file_name", "match": {"text": file_name}}]
                 },
                 limit=100,
-                with_payload=["metadata.file_name", "metadata.record_date", "content"]
+                with_payload=[
+                    "metadata.file_name",
+                    "metadata.record_date",
+                    "metadata.loc",
+                    "content"
+                ]
             )
             if points:
                 return points
@@ -34,7 +38,12 @@ class FullDocumentService:
                         "must": [{"key": "metadata.file_name", "match": {"text": normalized}}]
                     },
                     limit=100,
-                    with_payload=["metadata.file_name", "metadata.record_date", "content"]
+                    with_payload=[
+                        "metadata.file_name",
+                        "metadata.record_date",
+                        "metadata.loc",
+                        "content"
+                    ]
                 )
             return points
 
@@ -47,14 +56,19 @@ class FullDocumentService:
             if alt_collection:
                 points = await try_variants(alt_collection)
                 if points:
-                    collection = alt_collection  # запомним, что мы его используем
+                    collection = alt_collection  # используем другую коллекцию
 
         if not points:
             raise HTTPException(status_code=404, detail=f"No data found for file_name '{file_name}'")
 
+        # Правильная сортировка по loc.lines.from внутри metadata
         sorted_points = sorted(
             points,
-            key=lambda p: p["payload"].get("loc", {}).get("lines", {}).get("from", 0)
+            key=lambda p: p["payload"]
+                .get("metadata", {})
+                .get("loc", {})
+                .get("lines", {})
+                .get("from", 0)
         )
 
         content = "\n".join(p["payload"].get("content", "") for p in sorted_points)
