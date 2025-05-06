@@ -1,6 +1,6 @@
 from typing import List
 from fastapi import HTTPException
-from models.schemas import FileResult
+from models.schemas import FileResult, FileMeta
 from services.document_service import FullDocumentService
 from clients.qdrant import scroll_qdrant
 
@@ -11,67 +11,78 @@ DEFAULT_COLLECTION = "transcriptSummary"
 class CompareMeetingsService:
     @staticmethod
     async def compare_latest(collection: str = DEFAULT_COLLECTION) -> List[FileResult]:
-        # 1. Получаем все точки, отсортированные по timestamp ↓
+        files = await CompareMeetingsService._select_files_for_comparison(collection)
+        truncate = len(files) > 4
+
+        result: List[FileResult] = []
+        for file in files:
+            full_doc = await FullDocumentService.load_full_document(
+                collection=collection,
+                file_name=file.file_name,
+                truncate=truncate
+            )
+            if not truncate and len(full_doc.content) > MAX_FULL_CHARS:
+                full_doc.content = full_doc.content[:MAX_FULL_CHARS] + "\n\n... (текст обрезан)"
+            result.append(full_doc)
+
+        return result
+
+    @staticmethod
+    async def fallback_latest_file_list(collection: str = DEFAULT_COLLECTION) -> List[FileMeta]:
+        """
+        Возвращает только file_name и record_date последних встреч (без content).
+        Используется при ResponseTooLargeError или по запросу.
+        """
+        return await CompareMeetingsService._select_files_for_comparison(collection, meta_only=True)
+
+    @staticmethod
+    async def _select_files_for_comparison(
+        collection: str,
+        meta_only: bool = False
+    ) -> List[FileMeta | FileResult]:
+        """
+        Общий метод для логики сравнения последних встреч.
+        Если meta_only=True — возвращает FileMeta.
+        Иначе возвращается список FileResult через full-document.
+        """
         points = await scroll_qdrant(
             collection=collection,
-            scroll_filter={},  # нет фильтра — получаем все
+            scroll_filter={},
             limit=1000,
             order_by={"key": "timestamp", "direction": "desc"},
             with_payload=["metadata.file_name", "metadata.record_date", "timestamp"]
         )
 
-        # 2. Группировка по file_name и извлечение даты
-        files_by_date = {}
+        # Группируем по timestamp
+        files_by_ts = {}
         for p in points:
             meta = p.get("payload", {}).get("metadata", {})
+            ts = p.get("payload", {}).get("timestamp")
             fname = meta.get("file_name")
             rdate = meta.get("record_date")
-            ts = p.get("payload", {}).get("timestamp")
             if not fname or not ts:
                 continue
-            files_by_date.setdefault(ts, []).append({
-                "file_name": fname,
-                "record_date": rdate,
-            })
+            files_by_ts.setdefault(ts, []).append(FileMeta(file_name=fname, record_date=rdate))
 
-        if not files_by_date:
+        if not files_by_ts:
             raise HTTPException(status_code=404, detail="No data found")
 
-        # 3. Сортировка по timestamp ↓
-        sorted_timestamps = sorted(files_by_date.keys(), reverse=True)
+        sorted_ts = sorted(files_by_ts.keys(), reverse=True)
+        first_ts_files = files_by_ts[sorted_ts[0]]
 
-        # 4. Логика: если на последней дате >= 2 файлов → берём их. Иначе → берём следующую дату.
-        first_ts = sorted_timestamps[0]
-        first_files = files_by_date[first_ts]
-
-        if len(first_files) >= 2:
-            combined_files = first_files
+        if len(first_ts_files) >= 2:
+            selected = first_ts_files
+        elif len(sorted_ts) > 1:
+            selected = first_ts_files + files_by_ts[sorted_ts[1]]
         else:
-            if len(sorted_timestamps) < 2:
-                raise HTTPException(status_code=404, detail="Not enough data for comparison")
-            second_ts = sorted_timestamps[1]
-            combined_files = first_files + files_by_date[second_ts]
+            selected = first_ts_files
 
-        # 🔧 4.1. Удаление дубликатов по file_name
+        # Уникальные file_name
         seen = set()
-        selected_files = []
-        for f in combined_files:
-            if f["file_name"] not in seen:
-                selected_files.append(f)
-                seen.add(f["file_name"])
-        # 5. Получение content из FullDocumentService
-        truncate = True if len(selected_files) <= 4 else False
-        max_length = MAX_FULL_CHARS if not truncate else None
+        unique_files = []
+        for f in selected:
+            if f.file_name not in seen:
+                seen.add(f.file_name)
+                unique_files.append(f)
 
-        result: List[FileResult] = []
-        for file in selected_files:
-            full_doc = await FullDocumentService.load_full_document(
-                collection=collection,
-                file_name=file["file_name"],
-                truncate=truncate
-            )
-            if max_length and len(full_doc.content) > max_length:
-                full_doc.content = full_doc.content[:max_length] + "\n\n... (текст обрезан)"
-            result.append(full_doc)
-
-        return result
+        return unique_files if meta_only else unique_files  # дальше вызывается full-document в compare_latest

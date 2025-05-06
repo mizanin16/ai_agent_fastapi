@@ -20,6 +20,10 @@ class FileMeta(BaseModel):
     file_name: str
     record_date: Optional[str]
 
+class AgentErrorLog(BaseModel):
+    query: str
+    error: str
+    context: dict | None = None
 
 class SearchResponse(BaseModel):
     transcriptSummary: List[FileResult]
