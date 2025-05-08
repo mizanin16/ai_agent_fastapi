@@ -9,7 +9,7 @@ async def test_response_size(size: int = Query(..., ge=1, le=500000)):
     Возвращает JSON-объект с полем `payload`, содержащим строку заданной длины.
     Используется для тестирования ограничений на размер ответа.
     """
-    content = "купец" * (size // 5)
+    content = generate_random_russian_text(size)
     return JSONResponse(content={"length": len(content), "payload": content})
 
 
