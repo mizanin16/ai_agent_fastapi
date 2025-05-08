@@ -4,11 +4,10 @@ from fastapi.responses import JSONResponse
 router = APIRouter()
 
 @router.get("/test-response-size")
-async def test_response_size(size: int = Query(1024, ge=1, le=500000)):
-    content = "к" * size
-    return JSONResponse(content={"id": "test", "content": content})
-
-@router.get("/test-response-size-query")
-async def test_response_size(size: int = Query(1024, ge=1, le=500000)):
-    content = "a" * size
-    return JSONResponse(content={"id": "test", "content": content})
+async def test_response_size(size: int = Query(..., ge=1, le=500000)):
+    """
+    Возвращает JSON-объект с полем `payload`, содержащим строку заданной длины.
+    Используется для тестирования ограничений на размер ответа.
+    """
+    content = "х" * size
+    return JSONResponse(content={"length": len(content), "payload": content})
