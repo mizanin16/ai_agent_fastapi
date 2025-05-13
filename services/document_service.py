@@ -4,7 +4,7 @@ from models.schemas import FileResult
 from clients.qdrant import scroll_qdrant
 
 COLLECTIONS = ["rawTranscript", "transcriptSummary"]
-MAX_CONTENT_LENGTH = 5000
+MAX_CONTENT_LENGTH = 12000
 
 
 class FullDocumentService:
