@@ -87,7 +87,8 @@ class SemanticSearchService:
                     score=item["score"],
                     file_name=meta.get("file_name", ""),
                     record_date=meta.get("record_date", ""),
-                    content=content
+                    content=content,
+                    collection_used=collection
                 ))
 
         # Сортировка по score ↓
